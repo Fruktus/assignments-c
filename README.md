@@ -1,8 +1,10 @@
 # Assignments-c
 This is a repository for multiple small c assignments I have completed
 
-## Task
+## Description
 Tworzenie procesów. Środowisko procesu, sterowanie procesami.
+
+## Task
 Zadanie 1. (20%)
 Zmodyfikuj zadanie 2 z poprzedniego zestawu w taki sposób, iż przeszukiwanie w każdym z odnalezionych (pod)katalogow powinno odbywać sie w osobnym procesie.  
 
