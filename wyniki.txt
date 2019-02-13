@@ -1,0 +1,75 @@
+10000x4b
+	sort:
+		sys:
+		time: 82.686394
+		usertime: 0 cputime: 6933
+		
+		lib:
+		time: 8.119986
+		usertime: 0 cputime: 21
+	cp:
+		sys:
+		time: 0.000590
+		usertime: 0 cputime: 0
+
+		lib:
+		time: 0.000644
+		usertime: 0 cputime: 0
+10000x512 
+	sort:
+		sys:
+		time: 86.398325
+		usertime: 0 cputime: 6688
+
+		lib:
+		time: 31.622835
+		usertime: 0 cputime: 1506
+	cp:
+		sys:
+		time: 0.015016
+		usertime: 0 cputime: 1
+
+		lib:
+		time: 0.033060
+		usertime: 0 cputime: 3
+
+10000x4096
+	sort:
+		sys:
+		time: 199.109431
+		usertime: 0 cputime: 16524
+
+		lib:
+		time: 253.511406
+		usertime: 0 cputime: 18075
+
+	cp:
+		sys:
+		time: 0.131007
+		usertime: 0 cputime: 13
+
+		lib:
+		time: 0.246585
+		usertime: 0 cputime: 24
+
+1000x8192 
+	sort:
+		sys:
+		time: 2.107653
+		usertime: 0 cputime: 173
+
+		lib:
+		time: 2.582801
+		usertime: 0 cputime: 188
+	
+	cp:
+		sys:
+		time: 0.221778
+		usertime: 0 cputime: 22
+
+		lib:
+		time: 0.570605
+		usertime: 0 cputime: 56
+
+
+Wnioski: ogolnie ciezko stwierdzic ktory sposob jest lepszy, jednak na podstawie dostepnych danych mozna uznac ze biblioteka systemowa lepiej radzi sobie z plikami o duzych blokach, nawet gdy jest ich sporo, podczas gdy biblioteki c zdecydowanie bija je jesli mamy bardzo wiele malych blokow.
