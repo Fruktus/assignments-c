@@ -1,8 +1,10 @@
 # Assignments-c
 This is a repository for multiple small c assignments I have completed
 
-## Task
+## Description
 Zarządzanie pamięcią, biblioteki, pomiar czasu 
+
+## Task
 Zadanie 1. Alokacja tablicy z wskaźnikami na bloki pamięci zawierające znaki (25%)
 Zaprojektuj i przygotuj zestaw funkcji (bibliotekę) do zarządzania tablicą bloków zawierających znaki.
 
