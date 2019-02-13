@@ -1,0 +1,30 @@
+wszystko dla tablicy 100k elementow, bez zmian optymalizacji
+	static:
+		create:
+			time: 0.000050
+		recreate:
+			time deleting: 0.001955
+			time creating: 0.000240
+			time total: 0.002195
+		fill:
+			time: 0.025255
+	dynamic:
+		create:
+			time: 0.000056
+		recreate:
+			time deleting: 0.023467
+			time creating: 0.000220
+			time total: 0.023687
+		fill:
+			time: 0.025705
+	linked:
+		create:
+			time: 0.000059
+		recreate:
+			time deleting: 0.022272
+			time creating: 0.000222
+			time total: 0.022494
+		fill:
+			time: 0.025606
+
+Wniosek: najlepsze efekty dała biblioteka statyczna, druga w kolejności jest współdzielona, najgorzej spisuje się dynamicznie łączona

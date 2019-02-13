@@ -1,0 +1,18 @@
+Alokowanie pustej tablicy 100k elementow
+	time: 0.000027
+	time: 0.000032
+	time: 0.000036
+
+zupełnianie 100k blokami długości 100
+	time: 0.023277
+	time: 0.020679
+	time: 0.023143
+
+Usuwanie pełnej tablicy i ponowne alokowanie pustej tablicy
+	time deleting: 0.024243
+	time creating: 0.000217
+	time total: 0.024460
+
+	time deleting: 0.021387
+	time creating: 0.000304
+	time total: 0.021691

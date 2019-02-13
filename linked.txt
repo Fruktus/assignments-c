@@ -1,0 +1,2 @@
+gcc -shared -o lab1.so  lab1.o  -lm
+gcc  lab1main.c -o lab1main -L/Users/Antek/Desktop/Notatki/sysopy/lab1 -llab1

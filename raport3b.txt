@@ -1,0 +1,61 @@
+dla 100k elementow
+wnioski: widzimy poprawe w stosunku do podstawowej optymalizacji -O0, wieksza dla O3 niz O1, jednak w takiej skali roznice czasowe sa zbyt niewielkie by w praktyce je dostrzec. Dla bardziej zlozonych kalkulkacji bylylyby bardzo przydatne.
+
+-O1
+static:
+	create:
+		time: 0.000051
+	fill:
+		time: 0.026481
+	recreate:
+		time deleting: 0.023593
+		time creating: 0.000223
+		time total: 0.023816
+linked:
+	create:
+		time: 0.000058
+	fill:
+		time: 0.025398
+	recreate:
+		time deleting: 0.023308
+		time creating: 0.000222
+		time total: 0.023530
+dynamic:
+	create:
+		time: 0.000057
+	fill:
+		time: 0.025874
+	recreate:
+		time deleting: 0.023929
+		time creating: 0.000401
+		time total: 0.024330
+
+
+-O3
+static:
+	create:
+		time: 0.000048
+	fill:
+		time: 0.025717
+	recreate:
+		time deleting: 0.023125
+		time creating: 0.000291
+		time total: 0.023416
+linked:
+	create:
+		time: 0.000028
+	fill:
+		time: 0.025436
+	recreate:
+		time deleting: 0.023256
+		time creating: 0.000224
+		time total: 0.023480
+dynamic:
+	create:
+		time: 0.000050
+	fill:
+		time: 0.025652
+	recreate:
+		time deleting: 0.023774
+		time creating: 0.000226
+		time total: 0.024000
