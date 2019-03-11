@@ -32,39 +32,6 @@
 
 
 /*
-Wiadomości przekazywane są tylko w jedną stronę. 
-W sieci znajduje się tylko jeden token 
-i żadna aplikacja nie może nadawać 
-dopóki nie otrzyma wolnego tokenu, 
-pierwotnie token jest wolny. 
-
-Wysłanie wiadomości polega na zajęciu tokenu 
-i wpisaniu jej zawartości. Token traktujemy jako kopertę, 
-nośnik wiadomości. Odbiorca po przeczytaniu wiadomości 
-zwalnia token (flaga, wyczyszczenie zawartości...) 
-i przekazuje go dalej. Dla celów symulacyjnych przyjmujemy, 
-że token jest przetrzymywany przez każdego klienta przez około 1 sekundę 
-(po otrzymaniu tokenu wywołujemy np. sleep(1000), 
-po tym czasie przesyłamy go dalej po ewentualnym dodaniu wiadomości).
-
-Dla uproszczenia zakładamy, że żaden klient nie będzie "złośliwy" 
-i nie doprowadzi do sytuacji, w której w sieci znajdą się dwa tokeny,
-jednak za implementację mechanizmu, który to wyklucza, zostanie przyznany bonus punktowy. 
-
-Program ma umożliwiać dodawanie nowych użytkowników w trakcie działania systemu 
-oraz zapewniać dla nich pełną funkcjonalność, a także zabezpieczać przed sytuajcą, 
-w której wiadomość krąży w nieskończoność w sieci (należy odpowiednio przemyśleć protokół komunikacyjny). 
-
-Dodatkowo, każdy klient ma przesyłać multicastem 
-informację o otrzymaniu tokenu (na dowolny adres grupowy, 
-wspólny dla wszystkich klientów - może być wpisany 
-"na sztywno" w kod). Odbiorcami grupy multicastowej są wyłącznie loggery,
-proste aplikacje zapisujące ID nadawcy 
-i timestamp otrzymania tokenu, do pliku. Ilość loggerów może 
-być dowolna (co najmniej 2). Logger należy zaimplementować w języku innym niż klientów. 
-*/
-
-/*
 Token ring:
 Empty information frames are continuously circulated on the ring.
 When a computer has a message to send, it seizes the token. The computer will then be able to send the frame.
@@ -171,11 +138,14 @@ long dec(char *num){
     return strtol(num, NULL, 10);
 }
 
-//start: ./tokenclient jacek 1111 first 1112 1 t
-// ./tokenclient janek 1112 localhost 1111 0 t
+// TODO: add duplicate removal
+
+//start:    ./tokenclient jacek 1111 first 1112 1 t
+//          ./tokenclient janek 1112 localhost 1111 0 t
+//          ./tokenclient placek 1113 localhost 1111 0 t
 int main(int argc , char *argv[]){
     signal(SIGINT, intsig);
-    struct sockaddr_in nextnode, iserver, prevnode, lserver, lognode; //nextnode is next client, iserver is instace's listening socket for accepting new clients only
+    struct sockaddr_in nextnode, iserver, prevnode, lserver, lognode, tempnode; //nextnode is next client, iserver is instace's listening socket for accepting new clients only
     socklen_t addrlen = sizeof(iserver);
     char server_reply[1540], packet[1540]; //max text message size: 1501 (for nullbyte)
     char nickname[10];
@@ -202,13 +172,13 @@ int main(int argc , char *argv[]){
     in_addr_t this_ip = INADDR_ANY;
 
     //setup logger sock
-    logsockfd = socket(AF_INET , SOCK_DGRAM , 0);if(logsockfd==-1){printf("%d: Could not create socket", __LINE__ );perror("socket");exit(EXIT_FAILURE);}
+    logsockfd = socket(AF_INET , SOCK_DGRAM , 0);if(logsockfd==-1){printf(ANSI_COLOR_RED"Could not create log socket\n"ANSI_COLOR_RESET);perror("socket");exit(EXIT_FAILURE);}
     memset((char *) &lognode, 0, sizeof(lognode));
     lserver.sin_family = AF_INET;
     lserver.sin_addr.s_addr = INADDR_ANY;
     lserver.sin_port = 0; //get auto port
     if(bind(logsockfd, (struct sockaddr *)&lserver, sizeof(lserver)) < 0){perror("logbind failed. Error");cleanup();exit(EXIT_FAILURE);}
-    //printf("log socket started\n"); //debug
+
     //setup receiving address
     lognode.sin_family = AF_INET;
     lognode.sin_addr.s_addr = inet_addr(log_ip);
@@ -263,7 +233,7 @@ int main(int argc , char *argv[]){
         }else{
             //setup the socket and connect
             memset(&nextnode, '0', sizeof(nextnode));
-            nextnode.sin_addr.s_addr = inet_addr("127.0.0.1"); //should be supplied
+            nextnode.sin_addr.s_addr = inet_addr(argv[3]); //should be supplied
             nextnode.sin_family  = AF_INET;
             nextnode.sin_port = htons( dec(argv[4]) ); //convert from cmdline
             if(connect(outsockfd, (struct sockaddr *)&nextnode, sizeof(nextnode)) < 0){perror("connect failed. Error");cleanup();exit(EXIT_FAILURE);}
@@ -580,24 +550,324 @@ int main(int argc , char *argv[]){
         //end tcp
     }else if(argv[6][0] == 'u'){
         //create udp socket
-        outsockfd = socket(AF_INET , SOCK_DGRAM , 0);if(outsockfd==-1){printf("Could not create socket");perror("socket");exit(EXIT_FAILURE);}
-
+        
+        insockfd = socket(AF_INET , SOCK_DGRAM , 0);if(insockfd==-1){printf("%d: Could not create socket", __LINE__ );perror("socket");exit(EXIT_FAILURE);}
+        outsockfd = socket(AF_INET , SOCK_DGRAM , 0);if(outsockfd==-1){printf("%d: Could not create socket", __LINE__ );perror("socket");exit(EXIT_FAILURE);}
+        printf(ANSI_COLOR_GREEN"Internet dgram sockets created\n"ANSI_COLOR_RESET); //debug
+        
+        
         //make the socket reuse address and nonblocking
-        if (setsockopt (outsockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0){ perror("setsockopt failed\n"); cleanup();}
-        if (setsockopt (outsockfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0){perror("setsockopt(SO_REUSEADDR) failed"); cleanup();}
-    
-        /*
-        memset(&server, '0', sizeof(server));
-        server.sin_addr.s_addr = inet_addr("127.0.0.1"); //should be param, gethostbyname();
-        server.sin_family  = AF_INET;
-        server.sin_port = htons( 8080 ); //should be supplied
-    
-        memset(&server_reply, '0', sizeof(server_reply)); //safety measure
+        if (setsockopt (outsockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0){ perror("setsockopt failed\n"); cleanup();exit(EXIT_FAILURE);}
+        if (setsockopt (outsockfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0){perror("setsockopt(SO_REUSEADDR) failed"); cleanup();exit(EXIT_FAILURE);}
+        if (setsockopt (insockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0){ perror("setsockopt failed\n"); cleanup();exit(EXIT_FAILURE);}
+        if (setsockopt (insockfd, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0){perror("setsockopt(SO_REUSEADDR) failed"); cleanup();exit(EXIT_FAILURE);}
 
-        //Connect to given client, or self
-        if(connect(sockfd, (struct sockaddr *)&server, sizeof(server)) < 0){perror("connect failed. Error");cleanup();exit(EXIT_FAILURE);}
-        puts("Connected\n");
+
+        //Bind listening socket
+        iserver.sin_family = AF_INET;
+        iserver.sin_addr.s_addr = this_ip;
+        iserver.sin_port = htons( this_port ); //listen on given port
+    
+        //safety measure
+        memset(&server_reply, '\0', sizeof(server_reply)); 
+        memset(&prevnode, '\0', sizeof(prevnode));
+        memset(&nextnode, '\0', sizeof(nextnode));
+
+
+        /*
+        recvfrom saves address
+        sendto uses saved address
+        server: socket -> bind -> sendtorecvfrom
+        client: socket -> sendto/recvfrom
         */
+        //prepare socket for incoming connections
+        if(bind(insockfd, (struct sockaddr *)&iserver, sizeof(iserver)) < 0){perror("Internet bind failed. Error");cleanup();exit(EXIT_FAILURE);}
+        printf("Socket bound\n");
+
+        //if nextnode not provided wait for new clients, otherwise connect
+        if(strncmp(argv[3], "first", 5) == 0){
+            //since i have no way to accept connection and make it at the same time without threads i'll wait for clients
+            //this flag will let the current client know that it should set it's nextnode pointer to the first connecting clients
+            printf(ANSI_COLOR_CYAN"firstnode\n"ANSI_COLOR_RESET); //debug
+            firstnode = 1;
+        }else if(strncmp(argv[3], "localhost", 9) == 0){
+            memset(&nextnode, '0', sizeof(nextnode));
+            nextnode.sin_addr.s_addr = this_ip;
+            nextnode.sin_family  = AF_INET;
+            nextnode.sin_port = htons( dec(argv[4]) ); //convert from cmdline
+
+            // if(connect(outsockfd, (struct sockaddr *)&nextnode, sizeof(nextnode)) < 0){perror("connect failed. Error");cleanup();exit(EXIT_FAILURE);}
+            // printf(ANSI_COLOR_GREEN"Transmitting local\n"ANSI_COLOR_RESET);
+            sprintf(packet, "%u %d", this_ip, this_port);
+            if(sendto(outsockfd, packet, 20, 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){perror("firstconn:Send failed");}
+            retransmission_timer = clock();
+            printf(ANSI_COLOR_GREEN"address sent\n"ANSI_COLOR_RESET);
+        }else{
+            //setup the socket and connect
+            memset(&nextnode, '0', sizeof(nextnode));
+            nextnode.sin_addr.s_addr = inet_addr(argv[3]); //should be supplied
+            nextnode.sin_family  = AF_INET;
+            nextnode.sin_port = htons( dec(argv[4]) ); //convert from cmdline
+            
+            sprintf(packet, "%u %d\n", this_ip, this_port);
+            if(sendto(outsockfd, packet, 20, 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){perror("firstconn:Send failed");}
+            retransmission_timer = clock();
+            printf(ANSI_COLOR_GREEN"address sent\n"ANSI_COLOR_RESET);
+        }
+
+        
+        //udp: from here continue modifying, things needing change won't be minimized
+        //udp will only have recv to temporary structure, if address is the same proceed as usual, if mismatch, connect new client
+        while(1){           
+            //if has token and is not the only node
+            if(first_token && !firstnode){
+                printf(ANSI_COLOR_CYAN"sending first token\n"ANSI_COLOR_RESET);
+                memset(&packet, '\0', sizeof(packet));
+                sprintf(packet, "%u %d", this_ip, this_port);
+                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){perror("firstsend:Send failed");}
+                retransmission_timer = clock();
+                first_token = 0;
+            }
+            
+            //if token didn't return after given time, try again
+            printf("clocks: %ld\n", clock()-retransmission_timer);
+            if(retransmission_timer != 0 && clock()-retransmission_timer >= RTTMR){
+                printf(ANSI_COLOR_RED"retransmitting token\n"ANSI_COLOR_RESET);
+                if(sendto(outsockfd, packet, sizeof(packet), 0,(struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){perror("retransmission failed");}
+            }
+
+
+
+            
+            //regular recv, waiting for token
+            int recvcode = recvfrom(insockfd, &server_reply, sizeof(server_reply), 0, (struct sockaddr*)&tempnode, &addrlen); 
+            printf("%d:port %d:ip\n", tempnode.sin_port, tempnode.sin_addr.s_addr);
+            //check if we got the message
+            if(errno != EAGAIN && errno != EWOULDBLOCK){
+                //hopefully won't interrupt the transmission
+                if(recvcode == -1){
+                    perror("recv failed");
+                }else if(recvcode == 0){ //may need adjusting
+                    //previous node terminated, need to rearrange ring (if it would exit cleanly the ring wouldn't know its missing or smth)
+                    //not required, won't be implemented because of  time constraints
+                    /*
+                    how it could work:
+                    since its tcp we know that connection terminated
+                    the two affected nodes will know that 
+                    the one that had it as incoming will send a special packet for everyone to inspect with its own address
+                    the second one which had missing one as nextnode on receiving that address will swap to it
+                    ring fixed
+                    */
+                   printf(ANSI_COLOR_MAGENTA"conn closed\n"ANSI_COLOR_RESET);
+                // }else if(prevnode.sin_port == -1 && !firstnode){
+                //     printf("saving prevnode\n");
+                //     prevnode.sin_family = AF_INET;
+                //     prevnode.sin_port = tempnode.sin_port;
+                //     prevnode.sin_addr.s_addr = tempnode.sin_addr.s_addr;
+                //     firstnode = 0;
+                //     printf("sending token\n");
+                //     if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("0:Send failed");}
+                //     retransmission_timer = clock();
+                }else if(prevnode.sin_addr.s_addr != tempnode.sin_addr.s_addr || prevnode.sin_port != tempnode.sin_port){ //connection from new address -> new client
+
+                    //connecting new socket
+                    printf(ANSI_COLOR_CYAN"incoming connection\n"ANSI_COLOR_RESET);
+                    printf("conn packet: %s\n", server_reply);
+
+                    sscanf(server_reply, "%u %d\n", &tempaddr, &tempport);
+                    printf("client %d ip %u\n", tempport, tempaddr);
+                    //to keep it stateless (as much as possible) we'll handle this in the recv part
+                    memset(packet, '\0', sizeof(packet));
+                    if(tempaddr != nextnode.sin_addr.s_addr || htons(tempport) != nextnode.sin_port){
+                        nextnode.sin_family = AF_INET;
+                        nextnode.sin_addr.s_addr = tempaddr;
+                        nextnode.sin_port = htons(tempport);
+                        firstnode = 0;
+                    }
+                    printf(ANSI_COLOR_GREEN"ring closed\n"ANSI_COLOR_RESET);
+                    sprintf(packet, "%d %d %s %u %d %s", 0, 0, "jacek", this_ip, this_port, "");
+                    printf("sending token\n");
+                    if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){perror("ringconn:Send failed");}
+                    //extract ip and port (different from tempnode since its previous prevnode not nextnode)
+                }else{
+                    retransmission_timer = 0;
+                    //token received, process and send
+                    printf("received %d bytes\n", recvcode);
+                    //only sending char[10] nickname to logger
+
+                    sleep(rand()%(int)3 + 1); //debug, for simulation purposes
+
+                    /*message type 1B - for new clients and stuff 
+                        0 - empty
+                        1 - message
+                        2 - message read
+                        3 - getaddr (write self address inside unless sender) 
+                            !it cant be the address since we recognize recipients by nickname so lets use that
+                        4 - receiving adds the sender as nextnode
+                        5 - receiver succesfully connected
+
+                        type[char 1] rtc[char 1] recipient[char 10] sender_ip[char 4] sender_port[char 4] |=25 bytes, lets say 1500 for text
+                    */
+                    //!it should be stateless
+
+                    /*
+                    first inspect the type
+                        0 - if client wants to send, it fills the fields
+                        1 - checks the recipient, if self reads the text part, changes type to 2 and sends further
+                        2 - if sender == this client, clear the message, else send further
+                        3 - if sender != self, write self to recipient
+                        4 - if recipient == self, add the sender as nextnode
+                            sender is combo ip+port
+                    */
+
+                    int type;
+                    int rtc;
+                    char recp[10];
+                    in_addr_t sender_ip; //not sure if thats how it works
+                    int sender_port;
+                    char text[1500];
+                    memset(&sender_ip, '\0', sizeof(sender_ip));
+                    memset(&recp, '\0', sizeof(recp));
+                    memset(&text, '\0', sizeof(text));
+
+
+                    char logpacket[15];
+                    memset(&logpacket, '\0', sizeof(logpacket));
+                    sprintf(logpacket, "%s %d", nickname, type);
+                    if(sendto(logsockfd, logpacket, sizeof(logpacket), 0, (struct sockaddr*)&lognode, sizeof(lognode)) < 0){perror("logpacket: Send failed");}
+
+                    printf("packet: %s\n", server_reply);
+                    sscanf(server_reply, "%d %d %s %u %d %s", &type, &rtc, recp, &sender_ip, &sender_port, text); //how to work with header
+                    memset(server_reply, '\0', sizeof(server_reply));
+                    switch(type){
+                        case 0:
+                            if(!connecting_new){                         
+                                //when sending, first memset the packet to \0
+                                memset(&packet, '\0', sizeof(packet));
+                                //replace the text with random message
+                                char message[] = "random text message";
+                                //send to hardcoded test recipient
+                                sprintf(packet, "%d %d %s %u %d %s", 1, 0, "jacek", this_ip, this_port, message);
+
+                                printf("sending token\n");
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("0:Send failed");}
+                                retransmission_timer = clock();
+                            }else{
+                                //we need to obtain prevnode nickname so we send the 3-type message
+                                memset(&packet, '\0', sizeof(packet));
+                                sprintf(packet, "%d %d %s %u %d %s", 3, 0, nickname, this_ip, this_port, text);
+                                printf(ANSI_COLOR_CYAN"Polling name token\n"ANSI_COLOR_RESET);
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("0:3:Send failed");}
+                                retransmission_timer = clock();
+                            }
+                            break;
+                        case 1:
+                            //! remember to check retransimssion
+                            if(strncmp(recp, nickname, 10) == 0){
+                                //change type to 2 and send
+                                memset(&packet, '\0', sizeof(packet));
+                                sprintf(packet, "%d %d %s %u %d %s", 2, rtc, recp, sender_ip, sender_port, text);
+                                printf("replying token\n");
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("1:Send failed");}
+                                retransmission_timer = clock();
+                            }else if(sender_port == this_port){
+                                if(rtc < MAXRT){
+                                    memset(&packet, '\0', sizeof(packet));
+                                    rtc++;
+                                    sprintf(packet, "%d %d %s %u %d %s", type, rtc, recp, sender_ip, sender_port, text);
+                                    printf(ANSI_COLOR_YELLOW"token circled\n"ANSI_COLOR_RESET);
+                                    if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("1:rt Send failed");}
+                                    retransmission_timer = clock();
+                                }else{
+                                    memset(&packet, '\0', sizeof(packet));
+                                    rtc++;
+                                    sprintf(packet, "%d %d %s %u %d %s", 0, rtc, recp, sender_ip, sender_port, text);
+                                    printf("clearing and sending token\n");
+                                    if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("1:rtc0 Send failed");}
+                                    retransmission_timer = clock();
+                                }
+                            }else{
+                                memset(&packet, '\0', sizeof(packet));
+                                sprintf(packet, "%d %d %s %u %d %s", 0, rtc, recp, sender_ip, sender_port, text);
+                                printf("sending token\n");
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("1:rtc0 Send failed");}
+                                retransmission_timer = clock();
+                            }
+                            break;
+                        case 2:
+                            //for the sake of simplicity ill just compare the ports, since its localhost
+                            //otherwise id need to check the machine's ip in network
+                            if(sender_port == this_port){
+                                //change type to 0 and send
+                                memset(&packet, '\0', sizeof(packet));
+                                sprintf(packet, "%d %d %s %u %d %s", 0, rtc, recp, sender_ip, sender_port, text);
+                                printf("accepting token\n");
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("2:Send failed");}
+                                retransmission_timer = clock();
+                            }else{
+                                //change type to 0 and send
+                                memset(&packet, '\0', sizeof(packet));
+                                sprintf(packet, "%d %d %s %u %d %s", type, rtc, recp, sender_ip, sender_port, text);
+                                printf("sending token\n");
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("2:Send failed");}
+                                retransmission_timer = clock();
+                            }
+                            break;
+                        case 3:
+                            if(sender_port != this_port){
+                                //replace the recipient with own data and send
+                                memset(&packet, '\0', sizeof(packet));
+                                sprintf(packet, "%d %d %s %u %d %s", type, rtc, nickname, sender_ip, sender_port, text);
+                                printf("sending token\n");
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("3:Send failed");}
+                                retransmission_timer = clock();
+                            }else{
+                                //change type to 4, fill properly and send
+                                memset(&packet, '\0', sizeof(packet));
+                                //change the sender ip and port to the one of new client and send
+                                sprintf(packet, "%d %d %s %u %d %s", 4, 0, recp, tempaddr, tempport, text);
+                                printf(ANSI_COLOR_CYAN"newnode token\n"ANSI_COLOR_RESET);
+                                if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("3:Send failed");}
+                                retransmission_timer = clock();
+                            }
+                            break;
+                        case 4:
+                            if(strncmp(recp, nickname, 10) == 0){
+                                if(nextnode.sin_addr.s_addr != sender_ip || nextnode.sin_port != sender_port){
+                                    memset(&packet, '\0', sizeof(packet));
+                                    //change nextnode to the one supplied
+                                    close(outsockfd);
+                                    //extracted from packet
+                                    nextnode.sin_family = AF_INET;
+                                    nextnode.sin_addr.s_addr = sender_ip;
+                                    nextnode.sin_port = htons(sender_port);
+                                    outsockfd = socket(AF_INET , SOCK_STREAM , 0);if(outsockfd==-1){printf("%d: Could not create socket", __LINE__ );perror("socket");exit(EXIT_FAILURE);}
+                                    printf(ANSI_COLOR_GREEN"connected new node\n"ANSI_COLOR_RESET);
+
+                                    sprintf(packet, "%d %d %s %u %d %s", 0, rtc, recp, sender_ip, sender_port, text);
+                                    printf("sending token\n");
+                                    if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("4:Send failed");}
+                                    retransmission_timer = clock();
+                                }else{
+                                    sprintf(packet, "%d %d %s %u %d %s", 0, rtc, recp, sender_ip, sender_port, text);
+                                    printf("sending token\n");
+                                    if(sendto(outsockfd, packet, sizeof(packet), 0, (struct sockaddr*)&nextnode, sizeof(nextnode)) < 0){puts("4:Send failed");}
+                                    retransmission_timer = clock();
+                                }
+                            }
+                            break;                            
+                        default:
+                            //malformed token, clear?
+                            break;
+                    }
+                }
+            }else{
+                //the flag needs to be reset
+                printf("no new message\n"); //debug
+                errno = 0;
+            }
+        }
+
         //end udp
     }else{
         puts("unknown mode");
